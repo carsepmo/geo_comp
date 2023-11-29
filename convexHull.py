@@ -98,3 +98,68 @@ def convex_hull(pts):
             if p == hull[0]:
                 return np.array([hulls[h][i] for h, i in hull])
             hull.append(p)
+
+def obb(convexhull):
+    """
+    Return the minimum area oriented bounding box of convex hull
+    in CCW order.
+    """
+    num_points = len(convexhull)
+    
+    #start minimun obb
+    min_area = float('inf')
+    obb = None
+    
+    #iterate trough convexhull points
+    for i in range(num_points):
+        j = (i + 1) % num_points
+        
+        side_vec = convexhull[j] - convexhull[i]
+        side_lenght = np.linalg.norm(side_vec)
+        
+        #normalize vector direction
+        side_direction = side_vec/side_lenght
+        
+        #Get perpendicular vector direction
+        perpen_direction = np.array([-side_direction[1], side_direction[0]])
+        
+        #Project all points of convex onto current side
+        projected_points = np.dot(convexhull -convexhull[i], side_direction)
+        
+        #Get coordinares (min and max)
+        min_projection = np.min(projected_points)
+        max_projection = np.max(projected_points)
+        
+        #Get OBB area
+        width = max_projection - min_projection
+        height = side_lenght
+        
+        area = width * height
+        
+        #update min area if we found it
+        if area < min_area:
+            min_area = area
+            obb = {
+                'center': convex_hull[i] + 0.5 * side_vec,
+                'width': width,
+                'height': height,
+                'angle': np.arctan2(side_direction[1], side_direction[0]),
+                'area': area
+            }
+    return obb
+
+def get_obb_points(obb):
+    """
+    Return the points of the oriented bounding box.
+    """
+    center = obb['center']
+    width = obb['width']
+    height = obb['height']
+    angle = obb['angle
+        
+        
+        
+        
+        
+        
+    
