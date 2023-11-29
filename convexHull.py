@@ -147,18 +147,6 @@ def obb(convexhull):
                 'area': area
             }
     return obb
-
-def get_obb_points(obb):
-    """
-    Return the points of the oriented bounding box.
-    """
-    center = obb['center']
-    width = obb['width']
-    height = obb['height']
-    angle = obb['angle
-        
-        
-        
         
         
         
