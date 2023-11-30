@@ -99,53 +99,80 @@ def convex_hull(pts):
                 return np.array([hulls[h][i] for h, i in hull])
             hull.append(p)
 
-def obb(convexhull):
+def _get_bbox_vertices(pts, angle):
+    mean = np.float32([pts[:, 0].mean(), pts[:, 0].mean()])
+    c, s = np.cos(angle[0]), np.sin(angle[0])
+    #Rotation matrix
+    R = np.float32([c, -s, s, c]).reshape(2, 2)
+    pts = (pts.astype(np.float32) - mean) @ R
+    x0, y0 = pts[:, 0].min(), pts[:, 1].min()
+    x1, y1 = pts[:, 0].max(), pts[:, 1].max()
+    corners = np.float32([x0, y0, x0, y1, x1, y1, x1, y0])
+    corners = corners.reshape(-1, 2) @ R.T + mean
+    return corners
+
+def _compute_area(pts, caliper_angles):
+    """Uses fact that inv(R) = R.T"""
+    c = np.cos(caliper_angles[0])
+    s = np.sin(caliper_angles[0])
+    R = np.float32([c, -s, s, c]).reshape(2, 2)
+    pts = pts @ R
+    x0, y0 = pts[:, 0].min(), pts[:, 1].min()
+    x1, y1 = pts[:, 0].max(), pts[:, 1].max()
+    return (x1 - x0) * (y1 - y0)
+
+
+def minimun_obb(convexhull):
     """
-    Return the minimum area oriented bounding box of convex hull
-    in CCW order.
+    Return the minimum area oriented bounding box of convex hull.
     """
     num_points = len(convexhull)
-    
+    #get left and bottom
+    i,l = [convexhull[:, i].argmin()for i in range(2)]
+    #get right and upper
+    k,j = [convexhull[:, i].argmax()for i in range(2)]
+
     #start minimun obb
-    min_area = float('inf')
+    min_area = np.inf
     obb = None
     
+    calipers = np.int32([i, j, k, l]) #first BBX
+    caliper_angles = np.float32([0.5, 0, -0.5, 1]) * np.pi
+
+
     #iterate trough convexhull points
     for i in range(num_points):
-        j = (i + 1) % num_points
-        
-        side_vec = convexhull[j] - convexhull[i]
-        side_lenght = np.linalg.norm(side_vec)
-        
-        #normalize vector direction
-        side_direction = side_vec/side_lenght
-        
-        #Get perpendicular vector direction
-        perpen_direction = np.array([-side_direction[1], side_direction[0]])
-        
-        #Project all points of convex onto current side
-        projected_points = np.dot(convexhull -convexhull[i], side_direction)
-        
-        #Get coordinares (min and max)
-        min_projection = np.min(projected_points)
-        max_projection = np.max(projected_points)
-        
-        #Get OBB area
-        width = max_projection - min_projection
-        height = side_lenght
-        
-        area = width * height
-        
-        #update min area if we found it
-        if area < min_area:
-            min_area = area
-            obb = {
-                'center': convex_hull[i] + 0.5 * side_vec,
-                'width': width,
-                'height': height,
-                'angle': np.arctan2(side_direction[1], side_direction[0]),
-                'area': area
-            }
+      #roll vertices cw
+      calipers_advanced = (calipers + 1 ) % num_points 
+      
+      #Vectors from previous calipers to candidates
+      vec = convexhull[calipers_advanced] - convexhull[calipers]
+      
+      #Find angles of candidate edgelines
+      angles = np.arctan2(vec[:,1], vec[:,0]) 
+      
+      #Find candidate angle deltas
+      angle_deltas = caliper_angles -angles
+      
+      #Select pivot with smaller rotation
+      pivot = np.abs(angle_deltas).argmin()
+      calipers[pivot] = calipers_advanced[pivot]
+      caliper_angles -= angle_deltas[pivot]
+
+      #check if better set of calipers
+      area = _compute_area(convexhull[calipers], caliper_angles)
+      if area < min_area:
+        min_area = area
+        best_calipers = calipers.copy()
+        best_caliper_angles = caliper_angles.copy()
+    
+    vertices_obb = _get_bbox_vertices(convexhull[best_calipers], best_caliper_angles)
+    obb ={
+            'vertices': vertices_obb,
+            'calipers': best_calipers,
+            'angles' : best_caliper_angles,
+            'area' : min_area
+          }
     return obb
         
         
