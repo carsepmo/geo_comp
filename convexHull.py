@@ -4,6 +4,9 @@
 # Points of type array([x, y])
 # Carlos Sepúlveda nov-2023
 # carsepmo@gmail.com
+"""
+agregar np.ascontiguosarray()
+"""
 
 import numpy as np
 
@@ -176,5 +179,5 @@ def minimun_obb(convexhull):
     return obb
         
         
-        
+     
     

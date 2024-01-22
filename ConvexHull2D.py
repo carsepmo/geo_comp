@@ -174,27 +174,6 @@ class GrahamScanConvexHullError(Exception):
         super().__init__(message)
 
 
-def rotate_rectangle_to_horizontal(rectangle, angle):
-    """
-    Rota un rectángulo dado por sus vértices para dejarlo paralelo al plano horizontal.
-
-    Args:
-        rectangle (np.array): Un np.array que contiene los vértices del rectángulo. Debe ser una matriz 2D
-                              donde cada fila representa un vértice con coordenadas [x, y].
-        rotation_angle (float): El ángulo de rotación actual del rectángulo en radianes.
-
-    Returns:
-        np.array: Un np.array con los vértices del rectángulo rotado para que esté paralelo al plano horizontal.
-    """
-    # Calcula la matriz de rotación inversa
-    c = np.cos(angle)
-    s = np.sin(angle)
-    rotation_matrix_inverse = np.array([[c, -s],
-                                        [s, c]])
-    # Aplica la rotación inversa a los vértices del rectángulo
-    rotated_rectangle = rectangle @ rotation_matrix_inverse
-    return rotated_rectangle
-
 """ points = np.array([(2, 6), (4, 9), (5, 7), (9, 10), (7, 6), (13, 6), (11, 1), (5, 4), (7,11), (11,3), (19,7), (12.5,15)])
 cnvex_hull = ConvexHull2D(points)
 hull = cnvex_hull.convex_hull
