@@ -1,8 +1,4 @@
 import numpy as np
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-from matplotlib.patches import RegularPolygon, Polygon
 import ConvexHull2D as cvxh
 
 class OrientedHexGrid():
@@ -53,18 +49,26 @@ class OrientedHexGrid():
         
         xx, yy_even = np.meshgrid(x_coords, y_coords_even, indexing='ij')
         xx, yy_odd = np.meshgrid(x_coords, y_coords_odd, indexing='ij')
-        parity = np.arange(n_hex_h) % 2
-        parity = parity[np.newaxis, :]
-        yy = np.where(parity == 0, yy_even, yy_odd)
-        
-        centers = np.stack((xx, yy), axis=-1).reshape(-1, 2)
-        centers[:,0] = centers[:,0] + rotated_corners[:,0].min()
-        centers[:,1] = rotated_corners[:,1].max() - centers[:,1]
+        yy = np.zeros_like(yy_even)
+        yy[0::2, :] = yy_even[0::2, :]
+        yy[1::2, :] = yy_odd[1::2, :]
+
+        centers = np.dstack([xx, yy])
+
+        centers[:,:,0] = centers[:,:,0] + rotated_corners[:,0].min()
+        centers[:,:,1] = rotated_corners[:,1].max() - centers[:,:,1]
         hex_rot_centers = self._rotate_pts_to_hor(centers, -self.orientation)
         return  hex_rot_centers
-        
-# test
-points = np.array([(2, 6), (4, 9), (5, 7), (9, 10), (7, 6), (13, 6), (11, 1), (5, 4), (7,11), (11,3), (19,7), (12.5,15)])
+
+"""         
+######## test
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from matplotlib.patches import RegularPolygon, Polygon
+rng = np.random.default_rng()
+points = rng.random((300, 2)) *10 
+#points = np.array([(2, 6), (4, 9), (5, 7), (9, 10), (7, 6), (13, 6), (11, 1), (5, 4), (7,11), (11,3), (19,7), (12.5,15)])
 cnvex_hull = cvxh.ConvexHull2D(points)
 hull = cnvex_hull.convex_hull
 obb = cnvex_hull.obbx
@@ -72,23 +76,21 @@ hex_size = 1.8
 
 hexgrid = OrientedHexGrid(obb['vertices'], obb['angles'][1], hex_size)
 centers = hexgrid.hex_centers
-centers = np.reshape(centers, (-1,2))
 fig, ax = plt.subplots()
 ax.set_aspect('equal', adjustable='datalim')
-for center in centers:
-    hexagon = RegularPolygon((center[0], center[1]), numVertices = 6,
+for i in np.ndindex(centers.shape[:2]):
+    x, y = centers[i]
+    hexagon = RegularPolygon((x, y), numVertices = 6,
                                  radius =hex_size, orientation=np.radians(30)+obb['angles'][1],
                              facecolor='none', edgecolor='black'
                              )
     ax.add_patch(hexagon)
-    ax.scatter(center[0], center[1])
+    ax.scatter(x, y)
 rect_closed = np.vstack((obb['vertices'], obb['vertices'][0]))  # Asegurar que el OBB esté cerrado
 rect_patch = Polygon(rect_closed, closed=True, edgecolor='g', facecolor='none', lw=2, label='rect')
 ax.add_patch(rect_patch)
 points = points[np.lexsort((points[:, 1], points[:, 0]))]
-src_pol = points
-pol_patch = Polygon(src_pol, closed=True, edgecolor='r', facecolor='none', lw=2, label='polygon')
-ax.add_patch(pol_patch)
+
 for p in points:
   ax.scatter(p[0],p[1], marker='*' )
 
@@ -97,4 +99,4 @@ plt.ylim(obb['vertices'][:, 1].min() -5, obb['vertices'][:, 1].max() +5)
 plt.xlabel('X-axis')
 plt.ylabel('Y-axis')
 plt.title('Hexagonal Grid in Rectangle')
-plt.show()
+plt.show() """
