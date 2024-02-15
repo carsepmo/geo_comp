@@ -49,7 +49,9 @@ class ConvexHull2D():
         pts_transformed = pts @ R
         x0, y0 = pts_transformed.min(axis=0)
         x1, y1 = pts_transformed.max(axis=0)
-        return (x1 - x0) * (y1 - y0)
+        w = x1 - x0
+        h = y1 - y0
+        return w*h, w, h
     
     def get_obbx(self, convx_hull):
         num_points = len(convx_hull)
@@ -69,9 +71,11 @@ class ConvexHull2D():
             calipers[pivot] = calipers_advanced[pivot]
             caliper_angles -= angle_deltas[pivot]
 
-            area = self.__compute_area(convx_hull[calipers], caliper_angles)
+            area, width, height = self.__compute_area(convx_hull[calipers], 
+                                                      caliper_angles)
             if area < min_area:
                 min_area = area
+                w, h = width, height
                 best_calipers = calipers.copy()
                 best_caliper_angles = caliper_angles.copy()
 
@@ -80,7 +84,9 @@ class ConvexHull2D():
             'vertices': vertices_obb,
             'calipers': best_calipers,
             'angles': best_caliper_angles,
-            'area': min_area
+            'area': min_area,
+            'width': w,
+            'height': h
         }
 
 class _GrahamScanConvexHull2D():
