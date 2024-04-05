@@ -2,11 +2,10 @@ import numpy as np
 import ConvexHull2D as cvxh
 from shapely.geometry import Polygon
 import hexy as hx
-
-
+import hextools as hxt
 
 class OrientedHexGrid():
-    SQRT3 = np.sqrt(3)
+    SQRT3 = hxt.SQRT3
     
     def __init__(self, corners, angle, hex_size):
         self.grid_corners = corners
@@ -15,12 +14,7 @@ class OrientedHexGrid():
         self.__hex_centers = None
         
     def _rotate_pts(self, points, angle):
-        # Calcula la matriz de rotación inversa
-        c = np.cos(angle)
-        s = np.sin(angle)
-        rotation_matrix = np.array([[c, -s],
-                                            [s, c]])        
-        return points @ rotation_matrix
+        return hxt.rotate_pts(points, angle)
     
     @property
     def hex_centers(self):
@@ -30,7 +24,8 @@ class OrientedHexGrid():
         return self.__hex_centers
     
     def __get_hex_centers(self):
-        # rotated to horizontal plane
+        
+        # Oriented boundingbox corners rotated to horizonal plane
         rotated_corners = \
             self._rotate_pts(self.grid_corners, self.orientation)
         
@@ -45,22 +40,13 @@ class OrientedHexGrid():
         
         n_hex_h = np.ceil((grid_height * self.SQRT3) / 
                           (3 * self.hex_size) + 0.5).astype(int)
+        x0 = rotated_corners[:,0].min()
+        y0 = rotated_corners[:,1].max()
         
-        x_coords = self.hex_size * (0.5 + 1.5 * np.arange(n_hex_w))
+        ij_matrix = np.transpose(np.indices((n_hex_w, n_hex_h)), axes=(1,2,0))
+        centers = hxt.evenq2pixel(ij_matrix.reshape(-1,2), 
+                    (x0,y0), self.hex_size).reshape(n_hex_w, n_hex_h,-1)
         
-        y_coords_even = self.SQRT3 * self.hex_size * (0.5 + np.arange(n_hex_h))
-        y_coords_odd = self.SQRT3 * self.hex_size * np.arange(n_hex_h)
-        
-        xx, yy_even = np.meshgrid(x_coords, y_coords_even, indexing='ij')
-        xx, yy_odd = np.meshgrid(x_coords, y_coords_odd, indexing='ij')
-        yy = np.zeros_like(yy_even)
-        yy[0::2, :] = yy_even[0::2, :]
-        yy[1::2, :] = yy_odd[1::2, :]
-
-        centers = np.dstack([xx, yy])
-
-        centers[:,:,0] = centers[:,:,0] + rotated_corners[:,0].min()
-        centers[:,:,1] = rotated_corners[:,1].max() - centers[:,:,1]
         hex_rot_centers = self._rotate_pts(centers, -self.orientation)
         return  hex_rot_centers
 
@@ -77,17 +63,13 @@ class OHGFromPolygon(OrientedHexGrid):
         
         self.__hex_centers = None
         self.__valid_hex_tile = None
-        self.x0 = None
-        self.y0 = None
-        self.__rotated_polygon = None
-        self.__rot_hex_vert = None
-        self.__rot_hex_centers=None
+        self._x0 = None
+        self._y0 = None
     
     @property
     def hex_centers(self):
         if self.__hex_centers is None:
-            self.__hex_centers, self.__valid_hex_tile = self.__get_hex_centers()
-        
+            self.__hex_centers, self.__valid_hex_tile = self.__get_hex_centers()        
         return self.__hex_centers
     
     @property
@@ -139,44 +121,38 @@ class OHGFromPolygon(OrientedHexGrid):
         n_hex_h = np.ceil((grid_height * self.SQRT3) / 
                           (3 * self.hex_size) + 0.5).astype(int)
         
-        self.x0 = rotated_corners[:,0].min()
-        self.y0 = rotated_corners[:,1].max()
+        self._x0 = rotated_corners[:,0].min()
+        self._y0 = rotated_corners[:,1].max()
         
-        x_coords = self.hex_size * (0.5 + 1.5 * np.arange(n_hex_w))
+        ij_matrix = np.transpose(np.indices((n_hex_w, n_hex_h)), axes=(1,2,0))
+        centers = hxt.evenq2pixel(ij_matrix.reshape(-1,2), 
+                            (self._x0,self._y0), 
+                            hex_size).reshape(n_hex_w, n_hex_h,-1)
         
-        y_coords_even = self.SQRT3 * self.hex_size * (0.5 + np.arange(n_hex_h))
-        y_coords_odd = self.SQRT3 * self.hex_size * np.arange(n_hex_h)
-        
-        xx, yy_even = np.meshgrid(x_coords, y_coords_even, indexing='ij')
-        xx, yy_odd = np.meshgrid(x_coords, y_coords_odd, indexing='ij')
-        yy = np.zeros_like(yy_even)
-        yy[0::2, :] = yy_even[0::2, :]
-        yy[1::2, :] = yy_odd[1::2, :]
-        
-        #centros de hex alineados al eje vertical u horizontal.
-        centers = np.dstack([xx, yy])           
-        centers[:,:,0] = centers[:,:,0] + self.x0
-        centers[:,:,1] = self.y0 - centers[:,:,1]
        
-        
+        # hex vertex in local coordinate (no rotation)
         hex_vertices = self._get_hex_tiles_vertices(centers, self.hex_size)
+        
+        # polygon/hull points in local coord
         rot_poly_points = self._rotate_pts(self.points, self.orientation)
         
-        self._rot_hex_centers = centers
-        self._rot_hex_vert = hex_vertices
-        self._rotated_polygon = rot_poly_points
+        self._notrot_hex_cent = centers.copy()
         
+        # hex that intersect polygon/hull
         valid_hex_tile = self.__get_valid_hex(hex_vertices, rot_poly_points) 
         
-        hex_rot_centers = self._rotate_pts(centers, -self.orientation)
-        return  hex_rot_centers, valid_hex_tile 
+        # hex centers rotated to angle of major OBB axis (global coords) 
+        hex_centers = self._rotate_pts(centers, -self.orientation)
+        
+        return  hex_centers, valid_hex_tile 
     
     def evenq_to_pixel(self, col, row):
         x,y = hx.evenq_to_pixel_local(col, row)
-        x = x +self.x0
-        y = self.y0 -y
+        x = x +self._x0
+        y = self._y0 -y
         return self._rotate_pts(np.array([x,y]), -self.orientation)
-        
+       
+  
 class GraphFromHexGrid():
     pass
 
@@ -184,20 +160,20 @@ class GraphFromHexGrid():
 # []
 
 ######## test
-""" import matplotlib
-matplotlib.use('TkAgg')
+import matplotlib
+#matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import RegularPolygon
 from matplotlib.patches import Polygon as Pol
 rng = np.random.default_rng()
-points = rng.random((75, 2)) *50
+points = rng.random((75, 2)) *2000
 
 #points = np.array([(2, 6), (4, 9), (5, 7), (9, 10), (7, 6), (13, 6), (11, 1), (5, 4), (7,11), (11,3), (19,7), (12.5,15)])
 cnvex_hull = cvxh.ConvexHull2D(points)
 hull = cnvex_hull.convex_hull
 
 obb = cnvex_hull.obbx
-hex_size = 1
+hex_size = 32
 
 if obb['width'] > obb['height']:
     angle2 = obb['angles'][0]
@@ -214,6 +190,7 @@ ax.set_aspect('equal', adjustable='datalim')
 print(f'angle:{np.rad2deg(angle2)}')
 print(f'width:{np.rad2deg(obb["width"])}')
 print(f'height:{np.rad2deg(obb["height"])}')
+print(f'GRidShape:{hexgrid._grid_size}')
 for i in np.ndindex(centers.shape[:2]):
     facecol = 'gray'
     if not hexgrid.valid_hex_tiles[i]:
@@ -242,4 +219,4 @@ plt.ylim(obb['vertices'][:, 1].min() -5, obb['vertices'][:, 1].max() +5)
 plt.xlabel('X-axis')
 plt.ylabel('Y-axis')
 plt.title('Hexagonal Grid in Rectangle')
-plt.show() """
+plt.show()
