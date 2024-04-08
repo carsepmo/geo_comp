@@ -1,9 +1,23 @@
 import numpy as np
+"""
+Different tools to convert between hex coordinates systems, hex selection
+and other. To work with flat top hex version
+
+     ___
+ ___/ N \___ 
+/NW \___/NE \   Flat Top neighbors
+\___/ x \___/  
+/SW \___/SE \ 
+\___/ S \___/
+    \___/
+"""
+
+
 SQRT3 = np.sqrt(3)
 
 # coords transformations functions
 
-def evenq2cube(evenq):
+def evenq2cube(evenq, fractional = False):
     """
     Convert evenq to cube coordinates
     :param evenq: A coordinate tuple in evenq form (q,r)
@@ -11,7 +25,10 @@ def evenq2cube(evenq):
     """
     if isinstance(evenq, np.ndarray):
         q = evenq[:,0]
-        r = evenq[:,1] - ((q + (q & 1))/2).astype(int)
+        if not fractional:
+            r = evenq[:,1] - ((q + (q.astype(int) & 1))/2).astype(int)
+        else:
+            r = evenq[:,1] - ((q + (q.astype(int) & 1))/2)
         s = -q -r
         return np.vstack((q,r,s)).T
  
@@ -19,11 +36,14 @@ def evenq2cube(evenq):
         if not len(evenq) == 2:
             raise ValueError('evenq shall be a (col, row) pair')
         
-        if not all(isinstance(coord, int) for coord in evenq):
+        if not all(isinstance(coord, int) for coord in evenq) \
+                                                and not fractional:
             raise ValueError('evenq elements are index (shall be int).')
         col, row = evenq
         q = col
-        r = row - int((col + (col & 1)) / 2)
+        r = row - ((col + (int(col) & 1)) / 2)
+        if not fractional:
+            r = int(r)
         s = -q -r
         return (q, r, s)
 
@@ -178,10 +198,29 @@ def evenq2pixel(evenq, offset, hexsize = 1, angle=0):
         else:
             return (x,y)
 
-def pixel_to_evenq(evenq, offset, angle, hexsize = 1):
+def pixel_to_evenq(pixel, offset, hexsize = 1, angle=0):
     x0 = offset[0]
     y0 = offset[1]
-    pass
+    #rotar cuando angulo no sea cero
+    x,y =pixel
+    x = x - x0
+    y = y0- y
+    q = (2/3)*((x/hexsize) - 0.5)
+    r = (y/(SQRT3*hexsize)) - (1/2)*(int(q + 1)&1)
+    ## rounding to neareast hex
+    fracq, fracr, fracs = evenq2cube((q,r), fractional=True)
+    cq, cr, cs = np.round((fracq, fracr, fracs))
+    q_diff = np.abs(cq - fracq)
+    r_diff = np.abs(cr - fracr)
+    s_diff = np.abs(cs - fracs)
+    if q_diff > r_diff and q_diff > s_diff:
+        cq = -cr - cs
+    elif r_diff > s_diff:
+        cr = -cq -cs
+    else:
+        cs = -cq -cr
+    eq, er = cube2evenq((int(cq),int(cr),int(cs)))
+    return eq, er
 
 def rotate_pts(points, angle):
     """
@@ -200,7 +239,60 @@ def rotate_pts(points, angle):
         x = points[0]*c + points[1]*s
         y = points[0]*-s + points[1]*c
         return x,y
+
+
+## Hex selection
+# These are the vectors for moving from any hex to one of its neighbors
+# flat top
+# These are the vectors for moving from any hex to one of its neighbors
+# flat top and cube coordinates system
+S = np.array((0, +1, -1))
+SE = np.array((+1, 0, -1))
+SW = np.array((-1, +1, 0))
+N = np.array((0, -1, +1))
+NW = np.array((-1, 0, +1))
+NE = np.array((+1, -1, 0))
+
+ALL_DIRECTIONS_CUBE_COORDS = np.array([SE, NE, N, NW, SW, S])
+# same coordinates order
+ALL_DIR_EVENQ_EVENCOLS = np.array([[+1, +1], [+1,  0], [ 0, -1], 
+     [-1,  0], [-1, +1], [ 0, +1]])
+ALL_DIR_EVENQ_ODDCOLS = np.array([[+1,  0], [+1, -1], [ 0, -1], 
+     [-1, -1], [-1,  0], [ 0, +1]])
+
+dir={'SE':0, 'NE':1, 'N':2, 'NW':3, 'SW':4, 'S':5 }
+
+def get_neighbor(currentHex, r_dir, cubecoords =False):
+    """
+    Return de hex neighbor in the selected direction
+    :param currenttHex: coodinates of hex in evenq or cube
+    :param r_dir: the relative direction of movement 1 to 5 according to
+                  SE, NE, N, NW, SW, S
+    :return: hex neighbor in evenq or cube form.
+    """
     
+    if cubecoords:
+        return currentHex + ALL_DIRECTIONS_CUBE_COORDS[r_dir]
+    else:
+        q,_ = currentHex
+        #odd col
+        if q & 1:
+            return currentHex + ALL_DIR_EVENQ_ODDCOLS[r_dir]
+        else:
+            return currentHex + ALL_DIR_EVENQ_EVENCOLS[r_dir]
+        
+        
+def get_neighbors(currentHex, cubecoords = False):
+    if cubecoords:
+        return currentHex + ALL_DIRECTIONS_CUBE_COORDS
+    else:
+        q,_ = currentHex
+        
+        #odd col
+        if q & 1:
+            return currentHex + ALL_DIR_EVENQ_ODDCOLS
+        else:
+            return currentHex + ALL_DIR_EVENQ_EVENCOLS
 
 
 coords = [(2,1), (3,1), (0,0), (97,25), (1193487283,32872321)]
